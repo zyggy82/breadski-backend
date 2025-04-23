@@ -17,12 +17,12 @@ const pool = new Pool({
 });
 
 const transporter = nodemailer.createTransport({
-  host: lh164.dnsireland.com:2083, // lub smtp.gmail.com, smtp.office365.com itp.
+  host: "lh164.dnsireland.com", // lub smtp.gmail.com, smtp.office365.com itp.
   port: 465,
   secure: true,
   auth: {
-    user: apk@thebreadskibrothers.ie,
-    pass: N]dKOKe#V%o1, // lub hasło aplikacji
+    user: "apk@thebreadskibrothers.ie",
+    pass: "N]dKOKe#V%o1", // lub hasło aplikacji
   },
 });
 
