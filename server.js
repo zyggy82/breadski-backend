@@ -17,12 +17,15 @@ const pool = new Pool({
 });
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: lh164.dnsireland.com, // lub smtp.gmail.com, smtp.office365.com itp.
+  port: 465,
+  secure: true,
   auth: {
-    user: "your-email@gmail.com",       // <- zamień na swój e-mail
-    pass: "your-email-password-or-app-password"
-  }
+    user: apk@thebreadskibrothers.ie,
+    pass: N]dKOKe#V%o1, // lub hasło aplikacji
+  },
 });
+
 
 app.post("/login", async (req, res) => {
   const { login, password } = req.body;
