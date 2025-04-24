@@ -236,6 +236,51 @@ app.get("/orders", async (req, res) => {
   }
 });
 
+// GET groups assigned to a client
+app.get("/client-groups/:clientId", async (req, res) => {
+  const { clientId } = req.params;
+  try {
+    const result = await pool.query(
+      "SELECT group_name FROM client_product_groups WHERE client_id = $1",
+      [clientId]
+    );
+    res.json(result.rows.map(r => r.group_name));
+  } catch (error) {
+    console.error("Error fetching client groups:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST assign a group to a client
+app.post("/client-groups", async (req, res) => {
+  const { client_id, group_name } = req.body;
+  try {
+    await pool.query(
+      "INSERT INTO client_product_groups (client_id, group_name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+      [client_id, group_name]
+    );
+    res.sendStatus(201);
+  } catch (error) {
+    console.error("Error assigning group to client:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// DELETE a group from a client
+app.delete("/client-groups", async (req, res) => {
+  const { client_id, group_name } = req.body;
+  try {
+    await pool.query(
+      "DELETE FROM client_product_groups WHERE client_id = $1 AND group_name = $2",
+      [client_id, group_name]
+    );
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Error removing client group:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
 });
