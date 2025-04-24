@@ -80,6 +80,16 @@ app.post("/send", async (req, res) => {
   }
 });
 
+app.get("/clients", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT id, login, name, delivery_days FROM clients ORDER BY id");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Client fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
 });
