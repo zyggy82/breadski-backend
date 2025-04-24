@@ -223,6 +223,19 @@ app.post("/messages", async (req, res) => {
   }
 });
 
+// GET all orders
+app.get("/orders", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, client_login, client_name, created_at, delivery_date, order_type, message, products FROM orders ORDER BY created_at DESC"
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Order fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
 });
