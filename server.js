@@ -197,6 +197,31 @@ app.get("/products-full", async (req, res) => {
   }
 });
 
+// GET all messages
+app.get("/messages", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT id, content, created_at, recipients FROM messages ORDER BY created_at DESC");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Message fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST new message
+app.post("/messages", async (req, res) => {
+  const { content, recipients } = req.body;
+  try {
+    await pool.query(
+      "INSERT INTO messages (content, recipients) VALUES ($1, $2)",
+      [content, recipients]
+    );
+    res.sendStatus(201);
+  } catch (error) {
+    console.error("Message insert error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
