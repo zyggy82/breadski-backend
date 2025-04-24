@@ -99,6 +99,49 @@ app.delete("/clients/:id", async (req, res) => {
   }
 });
 
+// POST new product
+app.post("/products", async (req, res) => {
+  const { name, category, active } = req.body;
+  try {
+    await pool.query(
+      "INSERT INTO products (name, category, active) VALUES ($1, $2, $3)",
+      [name, category, active]
+    );
+    res.sendStatus(201);
+  } catch (error) {
+    console.error("Error adding product:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// PUT update product
+app.put("/products/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, category, active } = req.body;
+  try {
+    await pool.query(
+      "UPDATE products SET name = $1, category = $2, active = $3 WHERE id = $4",
+      [name, category, active, id]
+    );
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Error updating product:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// DELETE product
+app.delete("/products/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM products WHERE id = $1", [id]);
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Error deleting product:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.post("/send", async (req, res) => {
   const { login, subject, message } = req.body;
 
@@ -143,6 +186,17 @@ app.get("/clients", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+app.get("/products-full", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM products ORDER BY category, name");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error loading full products:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
