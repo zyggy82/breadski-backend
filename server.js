@@ -122,9 +122,9 @@ app.get("/groups", async (req, res) => {
 app.get("/products-full", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.name, p.category, p.active, g.name AS group_name, p.group_id
+      SELECT p.id, p.name, p.category, p.active, p.group_id, pg.name AS group_name
       FROM products p
-      LEFT JOIN product_groups g ON p.group_id = g.id
+      LEFT JOIN product_groups pg ON p.group_id = pg.id
       ORDER BY p.category, p.name
     `);
     res.json(result.rows);
