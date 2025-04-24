@@ -45,6 +45,60 @@ app.post("/products", async (req, res) => {
   }
 });
 
+// GET all clients
+app.get("/clients", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT id, login, name, delivery_days FROM clients ORDER BY login");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Client fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST new client
+app.post("/clients", async (req, res) => {
+  const { login, name, delivery_days, password } = req.body;
+  try {
+    await pool.query(
+      "INSERT INTO clients (login, name, delivery_days, password) VALUES ($1, $2, $3, $4)",
+      [login.toUpperCase(), name, delivery_days.split(",").map(day => day.trim()), password]
+    );
+    res.sendStatus(201);
+  } catch (error) {
+    console.error("Client insert error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// PUT update client
+app.put("/clients/:id", async (req, res) => {
+  const { id } = req.params;
+  const { login, name, delivery_days, password } = req.body;
+  try {
+    await pool.query(
+      "UPDATE clients SET login = $1, name = $2, delivery_days = $3, password = $4 WHERE id = $5",
+      [login.toUpperCase(), name, delivery_days.split(",").map(day => day.trim()), password, id]
+    );
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Client update error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// DELETE client
+app.delete("/clients/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM clients WHERE id = $1", [id]);
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Client delete error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.post("/send", async (req, res) => {
   const { login, subject, message } = req.body;
 
