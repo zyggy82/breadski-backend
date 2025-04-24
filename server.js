@@ -82,26 +82,24 @@ app.put("/clients/:id", async (req, res) => {
   const { login, name, delivery_days, password } = req.body;
 
   try {
-    const fields = ["login", "name", "delivery_days"];
-    const values = [login.toUpperCase(), name, delivery_days.split(",").map(day => day.trim())];
-    
-    // dodaj hasło tylko jeśli zostało podane
-    if (password) {
-      fields.push("password");
-      values.push(password);
+    if (password && password.trim() !== "") {
+      await pool.query(
+        "UPDATE clients SET login = $1, name = $2, delivery_days = $3, password = $4 WHERE id = $5",
+        [login.toUpperCase(), name, delivery_days.split(",").map(day => day.trim()), password, id]
+      );
+    } else {
+      await pool.query(
+        "UPDATE clients SET login = $1, name = $2, delivery_days = $3 WHERE id = $4",
+        [login.toUpperCase(), name, delivery_days.split(",").map(day => day.trim()), id]
+      );
     }
 
-    const updates = fields.map((f, i) => `${f} = $${i + 1}`).join(", ");
-    values.push(id); // dodaj id jako ostatni parametr
-
-    await pool.query(`UPDATE clients SET ${updates} WHERE id = $${values.length}`);
     res.sendStatus(200);
   } catch (error) {
     console.error("Client update error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
-
 
 app.delete("/clients/:id", async (req, res) => {
   try {
