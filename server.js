@@ -238,6 +238,33 @@ app.post("/send", async (req, res) => {
   }
 });
 
+// GET latest message for a specific login
+app.get("/messages/latest/:login", async (req, res) => {
+  const { login } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT content, created_at 
+       FROM messages 
+       WHERE 
+         recipients IS NULL 
+         OR recipients @> ARRAY[$1] 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [login.toUpperCase()]
+    );
+
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
+    } else {
+      res.json(null); // brak wiadomości
+    }
+  } catch (error) {
+    console.error("Latest message fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
 });
