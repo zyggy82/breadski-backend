@@ -76,26 +76,32 @@ app.post("/clients", async (req, res) => {
   }
 });
 
+// PUT update client
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
-  const { login, name, delivery_days, password, groups } = req.body;
+  const { login, name, delivery_days, password } = req.body;
+
   try {
-    await pool.query(
-      "UPDATE clients SET login = $1, name = $2, delivery_days = $3, password = $4 WHERE id = $5",
-      [login.toUpperCase(), name, delivery_days.split(",").map(d => d.trim()), password, id]
-    );
-    await pool.query("DELETE FROM client_product_groups WHERE client_id = $1", [id]);
-    if (groups && groups.length > 0) {
-      for (const group of groups) {
-        await pool.query("INSERT INTO client_product_groups (client_id, group_name) VALUES ($1, $2)", [id, group]);
-      }
+    const fields = ["login", "name", "delivery_days"];
+    const values = [login.toUpperCase(), name, delivery_days.split(",").map(day => day.trim())];
+    
+    // dodaj hasło tylko jeśli zostało podane
+    if (password) {
+      fields.push("password");
+      values.push(password);
     }
+
+    const updates = fields.map((f, i) => `${f} = $${i + 1}`).join(", ");
+    values.push(id); // dodaj id jako ostatni parametr
+
+    await pool.query(`UPDATE clients SET ${updates} WHERE id = $${values.length}`);
     res.sendStatus(200);
   } catch (error) {
     console.error("Client update error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 app.delete("/clients/:id", async (req, res) => {
   try {
