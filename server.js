@@ -14,7 +14,10 @@ const pool = new Pool({
 
 let orderCounter = 1;
 
-// Login
+app.get("/next-order-number", (req, res) => {
+  res.json({ orderNumber: orderCounter++ });
+});
+
 app.post("/login", async (req, res) => {
   const { login, password } = req.body;
   try {
@@ -22,7 +25,9 @@ app.post("/login", async (req, res) => {
       "SELECT name, delivery_days FROM clients WHERE login = $1 AND password = $2",
       [login.toUpperCase(), password]
     );
-    if (result.rows.length === 0) return res.status(401).json({ error: "Invalid login or password" });
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Invalid login or password" });
+    }
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Login error:", error.message);
@@ -30,64 +35,7 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// Get products for client app
-app.post("/products", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT category, name FROM products WHERE active = true ORDER BY category, name");
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Product fetch error:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// Admin: Get all products (full)
-app.get("/products-full", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT * FROM products ORDER BY category, name");
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Error loading full products:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// Admin: CRUD products
-app.post("/products", async (req, res) => {
-  const { name, category, active } = req.body;
-  try {
-    await pool.query("INSERT INTO products (name, category, active) VALUES ($1, $2, $3)", [name, category, active]);
-    res.sendStatus(201);
-  } catch (error) {
-    console.error("Error adding product:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.put("/products/:id", async (req, res) => {
-  const { id } = req.params;
-  const { name, category, active } = req.body;
-  try {
-    await pool.query("UPDATE products SET name = $1, category = $2, active = $3 WHERE id = $4", [name, category, active, id]);
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("Error updating product:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.delete("/products/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    await pool.query("DELETE FROM products WHERE id = $1", [id]);
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("Error deleting product:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// Admin: Get all clients (with product groups)
+// CLIENTS
 app.get("/clients", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -109,14 +57,18 @@ app.get("/clients", async (req, res) => {
 app.post("/clients", async (req, res) => {
   const { login, name, delivery_days, password, groups } = req.body;
   try {
-    const clientResult = await pool.query(
+    const clientRes = await pool.query(
       "INSERT INTO clients (login, name, delivery_days, password) VALUES ($1, $2, $3, $4) RETURNING id",
       [login.toUpperCase(), name, delivery_days.split(",").map(d => d.trim()), password]
     );
-    const clientId = clientResult.rows[0].id;
-    for (const groupId of groups || []) {
-      await pool.query("INSERT INTO client_product_groups (client_id, group_id) VALUES ($1, $2)", [clientId, groupId]);
+    const clientId = clientRes.rows[0].id;
+
+    if (groups && groups.length > 0) {
+      for (const group of groups) {
+        await pool.query("INSERT INTO client_product_groups (client_id, group_name) VALUES ($1, $2)", [clientId, group]);
+      }
     }
+
     res.sendStatus(201);
   } catch (error) {
     console.error("Client insert error:", error.message);
@@ -128,12 +80,15 @@ app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
   const { login, name, delivery_days, password, groups } = req.body;
   try {
-    await pool.query("UPDATE clients SET login = $1, name = $2, delivery_days = $3, password = $4 WHERE id = $5", [
-      login.toUpperCase(), name, delivery_days.split(",").map(d => d.trim()), password, id
-    ]);
+    await pool.query(
+      "UPDATE clients SET login = $1, name = $2, delivery_days = $3, password = $4 WHERE id = $5",
+      [login.toUpperCase(), name, delivery_days.split(",").map(d => d.trim()), password, id]
+    );
     await pool.query("DELETE FROM client_product_groups WHERE client_id = $1", [id]);
-    for (const groupId of groups || []) {
-      await pool.query("INSERT INTO client_product_groups (client_id, group_id) VALUES ($1, $2)", [id, groupId]);
+    if (groups && groups.length > 0) {
+      for (const group of groups) {
+        await pool.query("INSERT INTO client_product_groups (client_id, group_name) VALUES ($1, $2)", [id, group]);
+      }
     }
     res.sendStatus(200);
   } catch (error) {
@@ -143,9 +98,8 @@ app.put("/clients/:id", async (req, res) => {
 });
 
 app.delete("/clients/:id", async (req, res) => {
-  const { id } = req.params;
   try {
-    await pool.query("DELETE FROM clients WHERE id = $1", [id]);
+    await pool.query("DELETE FROM clients WHERE id = $1", [req.params.id]);
     res.sendStatus(200);
   } catch (error) {
     console.error("Client delete error:", error.message);
@@ -153,7 +107,7 @@ app.delete("/clients/:id", async (req, res) => {
   }
 });
 
-// Product groups (for assignment)
+// GROUPS
 app.get("/groups", async (req, res) => {
   try {
     const result = await pool.query("SELECT id, name FROM product_groups ORDER BY name");
@@ -164,7 +118,62 @@ app.get("/groups", async (req, res) => {
   }
 });
 
-// Messages
+// PRODUCTS
+app.get("/products-full", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.id, p.name, p.category, p.active, g.name AS group_name, p.group_id
+      FROM products p
+      LEFT JOIN product_groups g ON p.group_id = g.id
+      ORDER BY p.category, p.name
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error loading full products:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/products", async (req, res) => {
+  const { name, category, active, group_id } = req.body;
+  try {
+    await pool.query(
+      "INSERT INTO products (name, category, active, group_id) VALUES ($1, $2, $3, $4)",
+      [name, category, active, group_id || null]
+    );
+    res.sendStatus(201);
+  } catch (error) {
+    console.error("Error adding product:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.put("/products/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, category, active, group_id } = req.body;
+  try {
+    await pool.query(
+      "UPDATE products SET name = $1, category = $2, active = $3, group_id = $4 WHERE id = $5",
+      [name, category, active, group_id || null, id]
+    );
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Error updating product:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.delete("/products/:id", async (req, res) => {
+  try {
+    await pool.query("DELETE FROM products WHERE id = $1", [req.params.id]);
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Error deleting product:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// MESSAGES
 app.get("/messages", async (req, res) => {
   try {
     const result = await pool.query("SELECT id, content, created_at, recipients FROM messages ORDER BY created_at DESC");
@@ -178,7 +187,10 @@ app.get("/messages", async (req, res) => {
 app.post("/messages", async (req, res) => {
   const { content, recipients } = req.body;
   try {
-    await pool.query("INSERT INTO messages (content, recipients) VALUES ($1, $2)", [content, recipients]);
+    await pool.query(
+      "INSERT INTO messages (content, recipients) VALUES ($1, $2)",
+      [content, recipients]
+    );
     res.sendStatus(201);
   } catch (error) {
     console.error("Message insert error:", error.message);
@@ -186,13 +198,17 @@ app.post("/messages", async (req, res) => {
   }
 });
 
-// Email sending
+// EMAIL SEND
 app.post("/send", async (req, res) => {
   const { login, subject, message } = req.body;
+
   try {
     const result = await pool.query("SELECT name FROM clients WHERE login = $1", [login.toUpperCase()]);
     const client = result.rows[0];
-    if (!client) return res.status(404).json({ error: "Client not found" });
+
+    if (!client) {
+      return res.status(404).json({ error: "Client not found" });
+    }
 
     const transporter = nodemailer.createTransport({
       host: "lh164.dnsireland.com",
@@ -216,11 +232,6 @@ app.post("/send", async (req, res) => {
     console.error("Email sending error:", error.message);
     res.status(500).json({ error: "Failed to send email" });
   }
-});
-
-// Order number for frontend
-app.get("/next-order-number", (req, res) => {
-  res.json({ orderNumber: orderCounter++ });
 });
 
 app.listen(3000, () => {
