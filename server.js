@@ -93,7 +93,7 @@ app.get("/clients", async (req, res) => {
     const result = await pool.query(`
       SELECT 
         c.id, c.login, c.name, c.delivery_days, 
-        ARRAY_REMOVE(ARRAY_AGG(cpg.group_id), NULL) AS groups
+        ARRAY_REMOVE(ARRAY_AGG(cpg.group_name), NULL) AS groups
       FROM clients c
       LEFT JOIN client_product_groups cpg ON c.id = cpg.client_id
       GROUP BY c.id
