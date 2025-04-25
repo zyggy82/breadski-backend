@@ -76,30 +76,62 @@ app.post("/clients", async (req, res) => {
   }
 });
 
-// PUT update client
+// PUT update client + its groups
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
-  const { login, name, delivery_days, password } = req.body;
+  const { login, name, delivery_days, password, groups } = req.body;
 
+  const clientLogin = login.toUpperCase();
+  const daysArray = delivery_days.split(",").map(d => d.trim());
+
+  const clientId = parseInt(id, 10);
+
+  const clientUpd = `
+    UPDATE clients
+       SET login = $1,
+           name = $2,
+           delivery_days = $3,
+           password = $4
+     WHERE id = $5
+  `;
+
+  const deleteOldGroups = `
+    DELETE FROM client_product_groups
+     WHERE client_id = $1
+  `;
+
+  const insertGroup = `
+    INSERT INTO client_product_groups (client_id, group_name)
+         VALUES ($1, $2)
+  `;
+
+  const client = await pool.connect();
   try {
-    if (password && password.trim() !== "") {
-      await pool.query(
-        "UPDATE clients SET login = $1, name = $2, delivery_days = $3, password = $4 WHERE id = $5",
-        [login.toUpperCase(), name, delivery_days.split(",").map(day => day.trim()), password, id]
-      );
-    } else {
-      await pool.query(
-        "UPDATE clients SET login = $1, name = $2, delivery_days = $3 WHERE id = $4",
-        [login.toUpperCase(), name, delivery_days.split(",").map(day => day.trim()), id]
-      );
+    await client.query("BEGIN");
+    // 1) zaktualizuj dane klienta
+    await client.query(clientUpd,
+      [clientLogin, name, daysArray, password, clientId]
+    );
+
+    // 2) usuń stare przypisania grup
+    await client.query(deleteOldGroups, [clientId]);
+
+    // 3) wstaw nowe przypisania
+    for (let grp of groups || []) {
+      await client.query(insertGroup, [clientId, grp]);
     }
 
+    await client.query("COMMIT");
     res.sendStatus(200);
-  } catch (error) {
-    console.error("Client update error:", error.message);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Client update error:", err);
     res.status(500).json({ error: "Server error" });
+  } finally {
+    client.release();
   }
 });
+
 
 app.delete("/clients/:id", async (req, res) => {
   try {
