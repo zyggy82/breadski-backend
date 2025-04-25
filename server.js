@@ -220,6 +220,20 @@ app.get("/messages", async (req, res) => {
   }
 });
 
+// Pobierz wszystkie grupy produktowe
+app.get("/product-groups", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT name FROM product_groups ORDER BY name"
+    );
+    // zwracamy tablicę obiektów { name }
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Product-groups fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.post("/messages", async (req, res) => {
   const { content, recipients } = req.body;
   try {
