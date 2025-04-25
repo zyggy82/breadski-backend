@@ -22,9 +22,19 @@ app.post("/login", async (req, res) => {
   const { login, password } = req.body;
   try {
     const result = await pool.query(
-      "SELECT name, delivery_days FROM clients WHERE login = $1 AND password = $2",
+      `SELECT
+         c.name,
+         c.delivery_days,
+         ARRAY_REMOVE(ARRAY_AGG(cpg.group_name),NULL) AS groups
+       FROM clients c
+       LEFT JOIN client_product_groups cpg
+         ON c.id = cpg.client_id
+       WHERE c.login = $1
+         AND c.password = $2
+       GROUP BY c.id`,
       [login.toUpperCase(), password]
     );
+
     if (result.rows.length === 0) {
       return res.status(401).json({ error: "Invalid login or password" });
     }
@@ -34,6 +44,7 @@ app.post("/login", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // CLIENTS
 app.get("/clients", async (req, res) => {
@@ -171,18 +182,34 @@ app.get("/products-full", async (req, res) => {
 });
 
 app.post("/products", async (req, res) => {
-  const { name, category, active, group_id } = req.body;
+  const { login } = req.body;
+
   try {
-    await pool.query(
-      "INSERT INTO products (name, category, active, group_id) VALUES ($1, $2, $3, $4)",
-      [name, category, active, group_id || null]
+    const result = await pool.query(
+      `SELECT
+         p.id,
+         p.name,
+         p.category
+       FROM products p
+       JOIN product_groups pg
+         ON p.group_id = pg.id
+       JOIN client_product_groups cpg
+         ON pg.name = cpg.group_name
+       JOIN clients c
+         ON cpg.client_id = c.id
+       WHERE c.login = $1
+         AND p.active = TRUE
+       ORDER BY p.category, p.name`,
+      [login.toUpperCase()]
     );
-    res.sendStatus(201);
+
+    res.json(result.rows);
   } catch (error) {
-    console.error("Error adding product:", error.message);
+    console.error("Product fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 app.put("/products/:id", async (req, res) => {
   const { id } = req.params;
