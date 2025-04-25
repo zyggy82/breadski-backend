@@ -87,17 +87,17 @@ app.post("/clients", async (req, res) => {
   }
 });
 
-// PUT update client + its groups
+// PUT update client + its groups, with optional password change
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
   const { login, name, delivery_days, password, groups } = req.body;
 
-  const clientLogin = login.toUpperCase();
-  const daysArray = delivery_days.split(",").map(d => d.trim());
-
   const clientId = parseInt(id, 10);
+  const clientLogin = login.toUpperCase();
+  const daysArray = delivery_days.split(",").map((d) => d.trim());
 
-  const clientUpd = `
+  // SQL do aktualizacji klienta z hasłem
+  const clientUpdWithPwd = `
     UPDATE clients
        SET login = $1,
            name = $2,
@@ -105,41 +105,65 @@ app.put("/clients/:id", async (req, res) => {
            password = $4
      WHERE id = $5
   `;
+  // SQL do aktualizacji klienta bez zmiany hasła
+  const clientUpdNoPwd = `
+    UPDATE clients
+       SET login = $1,
+           name = $2,
+           delivery_days = $3
+     WHERE id = $4
+  `;
 
   const deleteOldGroups = `
     DELETE FROM client_product_groups
      WHERE client_id = $1
   `;
-
   const insertGroup = `
     INSERT INTO client_product_groups (client_id, group_name)
          VALUES ($1, $2)
   `;
 
-  const client = await pool.connect();
+  const tx = await pool.connect();
   try {
-    await client.query("BEGIN");
-    // 1) zaktualizuj dane klienta
-    await client.query(clientUpd,
-      [clientLogin, name, daysArray, password, clientId]
-    );
+    await tx.query("BEGIN");
 
-    // 2) usuń stare przypisania grup
-    await client.query(deleteOldGroups, [clientId]);
-
-    // 3) wstaw nowe przypisania
-    for (let grp of groups || []) {
-      await client.query(insertGroup, [clientId, grp]);
+    // 1) Aktualizacja danych klienta (opcjonalnie z hasłem)
+    if (password && password.trim() !== "") {
+      await tx.query(clientUpdWithPwd, [
+        clientLogin,
+        name,
+        daysArray,
+        password,
+        clientId,
+      ]);
+    } else {
+      await tx.query(clientUpdNoPwd, [
+        clientLogin,
+        name,
+        daysArray,
+        clientId,
+      ]);
     }
 
-    await client.query("COMMIT");
+    // 2) Usuń stare grupy
+    await tx.query(deleteOldGroups, [clientId]);
+
+    // 3) Wstaw nowe grupy (jeśli jakiekolwiek przyszły)
+    if (Array.isArray(groups)) {
+      for (const grp of groups) {
+        // zakładam, że to nazwa grupy (group_name), a nie id
+        await tx.query(insertGroup, [clientId, grp]);
+      }
+    }
+
+    await tx.query("COMMIT");
     res.sendStatus(200);
   } catch (err) {
-    await client.query("ROLLBACK");
+    await tx.query("ROLLBACK");
     console.error("Client update error:", err);
     res.status(500).json({ error: "Server error" });
   } finally {
-    client.release();
+    tx.release();
   }
 });
 
