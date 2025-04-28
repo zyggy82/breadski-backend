@@ -325,9 +325,17 @@ app.post("/send", async (req, res) => {
     await pool.query(
       `INSERT INTO orders
          (client_id, order_number, delivery_date, order_type, note, items)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [clientId, orderNumber, deliveryDate, orderType, note, items]
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+      [
+        clientId,
+        orderNumber,
+        deliveryDate,
+        orderType,
+        note,
+        JSON.stringify(items),
+      ]
     );
+
 
     // 4) Wyślij maila z tym numerem w temacie
     const transporter = nodemailer.createTransport({
