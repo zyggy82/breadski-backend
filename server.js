@@ -301,49 +301,66 @@ app.post("/messages", async (req, res) => {
 
 // EMAIL SEND
 app.post("/send", async (req, res) => {
-  const { login, subject, message } = req.body;
-  const clientLogin = login.toUpperCase();
-
+  const { login, deliveryDate, orderType, note, items } = req.body;
+  // deliveryDate – ISO string date, orderType – "full" lub "supplementary"
   try {
-    // 1) verify client exists
-    const { rows:[client] } = await pool.query(
-      "SELECT name FROM clients WHERE login = $1",
-      [clientLogin]
+    // 1) Pobierz klienta
+    const clientRes = await pool.query(
+      "SELECT id, name FROM clients WHERE login = $1",
+      [login.toUpperCase()]
     );
-    if (!client) return res.status(404).json({ error: "Client not found" });
+    if (clientRes.rows.length === 0) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+    const { id: clientId, name: clientName } = clientRes.rows[0];
 
-    // 2) insert into orders, get the new serial id
-    const {
-      rows: [{ id: orderNumber }]
-    } = await pool.query(
-      `INSERT INTO orders (client_login, subject, body)
-       VALUES ($1, $2, $3)
-       RETURNING id`,
-      [clientLogin, subject, message]
+    // 2) Wylicz następny numer zamówienia
+    const numRes = await pool.query(
+      "SELECT COALESCE(MAX(order_number), 0) + 1 AS next_number FROM orders"
+    );
+    const orderNumber = numRes.rows[0].next_number;
+
+    // 3) Wstaw rekord do orders
+    await pool.query(
+      `INSERT INTO orders
+         (client_id, order_number, delivery_date, order_type, note, items)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [clientId, orderNumber, deliveryDate, orderType, note, items]
     );
 
-    // 3) send the email—include the persistent orderNumber in the subject
-    const fullSubject = `${subject} #${orderNumber}`;
+    // 4) Wyślij maila z tym numerem w temacie
     const transporter = nodemailer.createTransport({
       host: "lh164.dnsireland.com",
       port: 465,
       secure: true,
       auth: {
         user: "apk@thebreadskibrothers.ie",
-        pass: "N]dKOKe#V%o1"
-      }
-    });
-    await transporter.sendMail({
-      from: '"Breadski Orders" <apk@thebreadskibrothers.ie>',
-      to:   "orders@thebreadskibrothers.ie",
-      subject: fullSubject,
-      text: message
+        pass: "N]dKOKe#V%o1",
+      },
     });
 
-    res.sendStatus(200);
+    const subject = `Zamówienie ${clientName} ${new Date().toLocaleDateString("pl-PL")} #${orderNumber}`;
+    const text = [
+      `Klient: ${clientName}`,
+      `Typ: ${orderType === "full" ? "Pełne" : "Uzupełniające"}`,
+      `Data dostawy: ${new Date(deliveryDate).toLocaleDateString("pl-PL")}`,
+      `Notatka: ${note || "-"}`,
+      ``,
+      `Pozycje:`,
+      ...items.map(i => `- ${i.name}: ${i.qty}`)
+    ].join("\n");
+
+    await transporter.sendMail({
+      from: '"Breadski Orders" <apk@thebreadskibrothers.ie>',
+      to: "orders@thebreadskibrothers.ie",
+      subject,
+      text
+    });
+
+    return res.sendStatus(200);
   } catch (err) {
-    console.error("Email sending error:", err);
-    res.status(500).json({ error: "Failed to send email" });
+    console.error("Email sending error:", err.message);
+    return res.status(500).json({ error: "Failed to send order" });
   }
 });
 
