@@ -301,6 +301,7 @@ app.post("/messages", async (req, res) => {
 
 // EMAIL SEND
 app.post("/send", async (req, res) => {
+	console.log("⟶ /send payload:", req.body);
   const { login, deliveryDate, orderType, note, items } = req.body;
   // deliveryDate – ISO string date, orderType – "full" lub "supplementary"
   try {
@@ -363,7 +364,6 @@ app.post("/send", async (req, res) => {
     return res.status(500).json({ error: "Failed to send order" });
   }
 });
-
 
 // GET latest message for a specific login
 app.get("/messages/latest/:login", async (req, res) => {
