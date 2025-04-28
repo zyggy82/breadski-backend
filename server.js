@@ -302,15 +302,28 @@ app.post("/messages", async (req, res) => {
 // EMAIL SEND
 app.post("/send", async (req, res) => {
   const { login, subject, message } = req.body;
+  const clientLogin = login.toUpperCase();
 
   try {
-    const result = await pool.query("SELECT name FROM clients WHERE login = $1", [login.toUpperCase()]);
-    const client = result.rows[0];
+    // 1) verify client exists
+    const { rows:[client] } = await pool.query(
+      "SELECT name FROM clients WHERE login = $1",
+      [clientLogin]
+    );
+    if (!client) return res.status(404).json({ error: "Client not found" });
 
-    if (!client) {
-      return res.status(404).json({ error: "Client not found" });
-    }
+    // 2) insert into orders, get the new serial id
+    const {
+      rows: [{ id: orderNumber }]
+    } = await pool.query(
+      `INSERT INTO orders (client_login, subject, body)
+       VALUES ($1, $2, $3)
+       RETURNING id`,
+      [clientLogin, subject, message]
+    );
 
+    // 3) send the email—include the persistent orderNumber in the subject
+    const fullSubject = `${subject} #${orderNumber}`;
     const transporter = nodemailer.createTransport({
       host: "lh164.dnsireland.com",
       port: 465,
@@ -320,20 +333,20 @@ app.post("/send", async (req, res) => {
         pass: "N]dKOKe#V%o1"
       }
     });
-
     await transporter.sendMail({
       from: '"Breadski Orders" <apk@thebreadskibrothers.ie>',
-      to: "orders@thebreadskibrothers.ie",
-      subject,
+      to:   "orders@thebreadskibrothers.ie",
+      subject: fullSubject,
       text: message
     });
 
     res.sendStatus(200);
-  } catch (error) {
-    console.error("Email sending error:", error.message);
+  } catch (err) {
+    console.error("Email sending error:", err);
     res.status(500).json({ error: "Failed to send email" });
   }
 });
+
 
 // GET latest message for a specific login
 app.get("/messages/latest/:login", async (req, res) => {
