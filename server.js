@@ -191,7 +191,6 @@ app.get("/groups", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-  }
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -365,8 +364,7 @@ app.post("/send", async (req, res) => {
       "",
       "Pozycje:",
       ...items.map(i => `- ${i.name}: ${i.qty}`)
-    ].join("
-");
+    ].join("\n");
 
     await transporter.sendMail({
       from: '"Breadski Orders" <apk@thebreadskibrothers.ie>',
