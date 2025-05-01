@@ -388,14 +388,5 @@ app.post("/send", async (req, res) => {
 
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
-});// ────────────────────────────────────────────────────────────────
-
-app.get("/groups", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT id, name FROM product_groups ORDER BY name");
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Group fetch error:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
 });
+
