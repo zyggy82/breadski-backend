@@ -171,6 +171,18 @@ app.get("/groups", async (req, res) => {
   }
 });
 
+// Alias: /product-groups → identyczne jak /groups
+app.get("/product-groups", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT id, name FROM product_groups ORDER BY id");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Alias group fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
 app.get("/products-full", async (req, res) => {
   try {
     const result = await pool.query(`
