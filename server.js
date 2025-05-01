@@ -1,7 +1,3 @@
-// ────────────────────────────────────────────────────────────────
-// Breadski Backend Server (Express + PostgreSQL)
-// ────────────────────────────────────────────────────────────────
-
 const express = require("express");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
@@ -11,7 +7,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// PostgreSQL pool setup
 const pool = new Pool({
   connectionString: "postgresql://breadski_db_user:tt1Cx4TGFVW3fNR3p62a6S26hblArm2Q@dpg-d0491615pdvs73c5hlvg-a.frankfurt-postgres.render.com/breadski_db",
   ssl: { rejectUnauthorized: false }
@@ -19,17 +14,13 @@ const pool = new Pool({
 
 let orderCounter = 1;
 
-// ────────────────────────────────────────────────────────────────
-// SYSTEM ROUTES
-// ────────────────────────────────────────────────────────────────
+app.get("/", (req, res) => {
+  res.send("Breadski API is live");
+});
 
 app.get("/next-order-number", (req, res) => {
   res.json({ orderNumber: orderCounter++ });
 });
-
-// ────────────────────────────────────────────────────────────────
-// LOGIN
-// ────────────────────────────────────────────────────────────────
 
 app.post("/login", async (req, res) => {
   const { login, password } = req.body;
@@ -57,10 +48,6 @@ app.post("/login", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
-// ────────────────────────────────────────────────────────────────
-// CLIENTS
-// ────────────────────────────────────────────────────────────────
 
 app.get("/clients", async (req, res) => {
   try {
@@ -101,10 +88,6 @@ app.post("/clients", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
-// ────────────────────────────────────────────────────────────────
-// CLIENTS – UPDATE & DELETE
-// ────────────────────────────────────────────────────────────────
 
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
@@ -178,10 +161,6 @@ app.delete("/clients/:id", async (req, res) => {
   }
 });
 
-// ────────────────────────────────────────────────────────────────
-// GROUPS
-// ────────────────────────────────────────────────────────────────
-
 app.get("/groups", async (req, res) => {
   try {
     const result = await pool.query("SELECT id, name FROM product_groups ORDER BY id");
@@ -191,11 +170,6 @@ app.get("/groups", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-});
-
-// ────────────────────────────────────────────────────────────────
-// PRODUCTS
-// ────────────────────────────────────────────────────────────────
 
 app.get("/products-full", async (req, res) => {
   try {
@@ -268,10 +242,6 @@ app.delete("/products/:id", async (req, res) => {
   }
 });
 
-// ────────────────────────────────────────────────────────────────
-// MESSAGES
-// ────────────────────────────────────────────────────────────────
-
 app.get("/messages", async (req, res) => {
   try {
     const result = await pool.query("SELECT id, content, created_at, recipients FROM messages ORDER BY created_at DESC");
@@ -321,10 +291,6 @@ app.get("/messages/latest/:login", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
-// ────────────────────────────────────────────────────────────────
-// EMAIL SEND
-// ────────────────────────────────────────────────────────────────
 
 app.post("/send", async (req, res) => {
   console.log("⟶ /send payload:", req.body);
@@ -380,12 +346,6 @@ app.post("/send", async (req, res) => {
   }
 });
 
-// ────────────────────────────────────────────────────────────────
-// SERVER START
-// ────────────────────────────────────────────────────────────────
-
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
-});
-  }
 });
