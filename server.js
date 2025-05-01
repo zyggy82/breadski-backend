@@ -177,7 +177,7 @@ app.get("/products-full", async (req, res) => {
       SELECT p.id, p.name, p.category, p.active, p.group_id, pg.name AS group_name
       FROM products p
       LEFT JOIN product_groups pg ON p.group_id = pg.id
-      ORDER BY p.group_id, p.name
+      ORDER BY p.group_id, p.id
     `);
     res.json(result.rows);
   } catch (error) {
@@ -206,7 +206,7 @@ app.post("/products", async (req, res) => {
          ON cpg.client_id = c.id
        WHERE c.login = $1
          AND p.active = TRUE
-       ORDER BY p.group_id, p.name`,
+       ORDER BY p.group_id, p.id`,
       [login.toUpperCase()]
     );
 
