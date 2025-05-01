@@ -1,7 +1,3 @@
-// ────────────────────────────────────────────────────────────────
-// Breadski Backend Server (Express + PostgreSQL)
-// ────────────────────────────────────────────────────────────────
-
 const express = require("express");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
@@ -11,7 +7,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// PostgreSQL pool setup
 const pool = new Pool({
   connectionString: "postgresql://breadski_db_user:tt1Cx4TGFVW3fNR3p62a6S26hblArm2Q@dpg-d0491615pdvs73c5hlvg-a.frankfurt-postgres.render.com/breadski_db",
   ssl: { rejectUnauthorized: false }
@@ -19,17 +14,9 @@ const pool = new Pool({
 
 let orderCounter = 1;
 
-// ────────────────────────────────────────────────────────────────
-// SYSTEM ROUTES
-// ────────────────────────────────────────────────────────────────
-
 app.get("/next-order-number", (req, res) => {
   res.json({ orderNumber: orderCounter++ });
 });
-
-// ────────────────────────────────────────────────────────────────
-// LOGIN
-// ────────────────────────────────────────────────────────────────
 
 app.post("/login", async (req, res) => {
   const { login, password } = req.body;
@@ -58,10 +45,8 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// ────────────────────────────────────────────────────────────────
-// CLIENTS
-// ────────────────────────────────────────────────────────────────
 
+// CLIENTS
 app.get("/clients", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -102,10 +87,7 @@ app.post("/clients", async (req, res) => {
   }
 });
 
-// ────────────────────────────────────────────────────────────────
-// CLIENTS – UPDATE & DELETE
-// ────────────────────────────────────────────────────────────────
-
+// PUT update client + its groups, with optional password change
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
   const { login, name, delivery_days, password, groups } = req.body;
@@ -114,6 +96,7 @@ app.put("/clients/:id", async (req, res) => {
   const clientLogin = login.toUpperCase();
   const daysArray = delivery_days.split(",").map((d) => d.trim());
 
+  // SQL do aktualizacji klienta z hasłem
   const clientUpdWithPwd = `
     UPDATE clients
        SET login = $1,
@@ -122,6 +105,7 @@ app.put("/clients/:id", async (req, res) => {
            password = $4
      WHERE id = $5
   `;
+  // SQL do aktualizacji klienta bez zmiany hasła
   const clientUpdNoPwd = `
     UPDATE clients
        SET login = $1,
@@ -143,16 +127,31 @@ app.put("/clients/:id", async (req, res) => {
   try {
     await tx.query("BEGIN");
 
+    // 1) Aktualizacja danych klienta (opcjonalnie z hasłem)
     if (password && password.trim() !== "") {
-      await tx.query(clientUpdWithPwd, [clientLogin, name, daysArray, password, clientId]);
+      await tx.query(clientUpdWithPwd, [
+        clientLogin,
+        name,
+        daysArray,
+        password,
+        clientId,
+      ]);
     } else {
-      await tx.query(clientUpdNoPwd, [clientLogin, name, daysArray, clientId]);
+      await tx.query(clientUpdNoPwd, [
+        clientLogin,
+        name,
+        daysArray,
+        clientId,
+      ]);
     }
 
+    // 2) Usuń stare grupy
     await tx.query(deleteOldGroups, [clientId]);
 
+    // 3) Wstaw nowe grupy (jeśli jakiekolwiek przyszły)
     if (Array.isArray(groups)) {
       for (const grp of groups) {
+        // zakładam, że to nazwa grupy (group_name), a nie id
         await tx.query(insertGroup, [clientId, grp]);
       }
     }
@@ -168,6 +167,7 @@ app.put("/clients/:id", async (req, res) => {
   }
 });
 
+
 app.delete("/clients/:id", async (req, res) => {
   try {
     await pool.query("DELETE FROM clients WHERE id = $1", [req.params.id]);
@@ -178,33 +178,25 @@ app.delete("/clients/:id", async (req, res) => {
   }
 });
 
-// ────────────────────────────────────────────────────────────────
 // GROUPS
-// ────────────────────────────────────────────────────────────────
-
 app.get("/groups", async (req, res) => {
   try {
-    const result = await pool.query("SELECT id, name FROM product_groups ORDER BY id");
+    const result = await pool.query("SELECT id, name FROM product_groups ORDER BY name");
     res.json(result.rows);
   } catch (error) {
     console.error("Group fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
-  }
-});
 
-// ────────────────────────────────────────────────────────────────
 // PRODUCTS
-// ────────────────────────────────────────────────────────────────
-
 app.get("/products-full", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT p.id, p.name, p.category, p.active, p.group_id, pg.name AS group_name
       FROM products p
       LEFT JOIN product_groups pg ON p.group_id = pg.id
-      ORDER BY p.group_id, p.name
+      ORDER BY p.category, p.name
     `);
     res.json(result.rows);
   } catch (error) {
@@ -221,9 +213,7 @@ app.post("/products", async (req, res) => {
       `SELECT
          p.id,
          p.name,
-         p.category,
-         p.group_id,
-         pg.name AS group_name
+         p.category
        FROM products p
        JOIN product_groups pg
          ON p.group_id = pg.id
@@ -233,7 +223,7 @@ app.post("/products", async (req, res) => {
          ON cpg.client_id = c.id
        WHERE c.login = $1
          AND p.active = TRUE
-       ORDER BY p.group_id, p.name`,
+       ORDER BY p.category, p.name`,
       [login.toUpperCase()]
     );
 
@@ -243,6 +233,7 @@ app.post("/products", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 app.put("/products/:id", async (req, res) => {
   const { id } = req.params;
@@ -269,16 +260,27 @@ app.delete("/products/:id", async (req, res) => {
   }
 });
 
-// ────────────────────────────────────────────────────────────────
 // MESSAGES
-// ────────────────────────────────────────────────────────────────
-
 app.get("/messages", async (req, res) => {
   try {
     const result = await pool.query("SELECT id, content, created_at, recipients FROM messages ORDER BY created_at DESC");
     res.json(result.rows);
   } catch (error) {
     console.error("Message fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Pobierz wszystkie grupy produktowe
+app.get("/product-groups", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT name FROM product_groups ORDER BY name"
+    );
+    // zwracamy tablicę obiektów { name }
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Product-groups fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -297,6 +299,81 @@ app.post("/messages", async (req, res) => {
   }
 });
 
+// EMAIL SEND
+app.post("/send", async (req, res) => {
+	console.log("⟶ /send payload:", req.body);
+  const { login, deliveryDate, orderType, note, items } = req.body;
+  // deliveryDate – ISO string date, orderType – "full" lub "supplementary"
+  try {
+    // 1) Pobierz klienta
+    const clientRes = await pool.query(
+      "SELECT id, name FROM clients WHERE login = $1",
+      [login.toUpperCase()]
+    );
+    if (clientRes.rows.length === 0) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+    const { id: clientId, name: clientName } = clientRes.rows[0];
+
+    // 2) Wylicz następny numer zamówienia
+    const numRes = await pool.query(
+      "SELECT COALESCE(MAX(order_number), 0) + 1 AS next_number FROM orders"
+    );
+    const orderNumber = numRes.rows[0].next_number;
+
+    // 3) Wstaw rekord do orders
+    await pool.query(
+      `INSERT INTO orders
+         (client_id, order_number, delivery_date, order_type, note, items)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+      [
+        clientId,
+        orderNumber,
+        deliveryDate,
+        orderType,
+        note,
+        JSON.stringify(items),
+      ]
+    );
+
+
+    // 4) Wyślij maila z tym numerem w temacie
+    const transporter = nodemailer.createTransport({
+      host: "lh164.dnsireland.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: "apk@thebreadskibrothers.ie",
+        pass: "N]dKOKe#V%o1",
+      },
+    });
+
+    const subject = `Zamówienie ${clientName} ${new Date().toLocaleDateString("pl-PL")} #${orderNumber}`;
+    const text = [
+      `Klient: ${clientName}`,
+      `Typ: ${orderType === "full" ? "Pełne" : "Uzupełniające"}`,
+      `Data dostawy: ${new Date(deliveryDate).toLocaleDateString("pl-PL")}`,
+      `Notatka: ${note || "-"}`,
+      ``,
+      `Pozycje:`,
+      ...items.map(i => `- ${i.name}: ${i.qty}`)
+    ].join("\n");
+
+    await transporter.sendMail({
+      from: '"Breadski Orders" <apk@thebreadskibrothers.ie>',
+      to: "orders@thebreadskibrothers.ie",
+      subject,
+      text
+    });
+
+    return res.sendStatus(200);
+  } catch (err) {
+    console.error("Email sending error:", err.message);
+    return res.status(500).json({ error: "Failed to send order" });
+  }
+});
+
+// GET latest message for a specific login
 app.get("/messages/latest/:login", async (req, res) => {
   const { login } = req.params;
 
@@ -315,7 +392,7 @@ app.get("/messages/latest/:login", async (req, res) => {
     if (result.rows.length > 0) {
       res.json(result.rows[0]);
     } else {
-      res.json(null);
+      res.json(null); // brak wiadomości
     }
   } catch (error) {
     console.error("Latest message fetch error:", error.message);
@@ -323,79 +400,6 @@ app.get("/messages/latest/:login", async (req, res) => {
   }
 });
 
-// ────────────────────────────────────────────────────────────────
-// EMAIL SEND
-// ────────────────────────────────────────────────────────────────
-
-app.post("/send", async (req, res) => {
-  console.log("⟶ /send payload:", req.body);
-  const { login, deliveryDate, orderType, note, items } = req.body;
-  try {
-    const clientRes = await pool.query("SELECT id, name FROM clients WHERE login = $1", [login.toUpperCase()]);
-    if (clientRes.rows.length === 0) {
-      return res.status(404).json({ error: "Client not found" });
-    }
-    const { id: clientId, name: clientName } = clientRes.rows[0];
-
-    const numRes = await pool.query("SELECT COALESCE(MAX(order_number), 0) + 1 AS next_number FROM orders");
-    const orderNumber = numRes.rows[0].next_number;
-
-    await pool.query(
-      `INSERT INTO orders (client_id, order_number, delivery_date, order_type, note, items)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
-      [clientId, orderNumber, deliveryDate, orderType, note, JSON.stringify(items)]
-    );
-
-    const transporter = nodemailer.createTransport({
-      host: "lh164.dnsireland.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: "apk@thebreadskibrothers.ie",
-        pass: "N]dKOKe#V%o1"
-      }
-    });
-
-    const subject = `Zamówienie ${clientName} ${new Date().toLocaleDateString("pl-PL")} #${orderNumber}`;
-    const text = [
-      `Klient: ${clientName}`,
-      `Typ: ${orderType === "full" ? "Pełne" : "Uzupełniające"}`,
-      `Data dostawy: ${new Date(deliveryDate).toLocaleDateString("pl-PL")}`,
-      `Notatka: ${note || "-"}`,
-      "",
-      "Pozycje:",
-      ...items.map(i => `- ${i.name}: ${i.qty}`)
-    ].join("
-");
-
-    await transporter.sendMail({
-      from: '"Breadski Orders" <apk@thebreadskibrothers.ie>',
-      to: "orders@thebreadskibrothers.ie",
-      subject,
-      text
-    });
-
-    return res.sendStatus(200);
-  } catch (err) {
-    console.error("Email sending error:", err.message);
-    return res.status(500).json({ error: "Failed to send order" });
-  }
-});
-
-// ────────────────────────────────────────────────────────────────
-// SERVER START
-// ────────────────────────────────────────────────────────────────
-
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
-});// ────────────────────────────────────────────────────────────────
-
-app.get("/groups", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT id, name FROM product_groups ORDER BY name");
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Group fetch error:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
 });
