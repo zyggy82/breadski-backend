@@ -28,10 +28,9 @@ app.post("/login", async (req, res) => {
     const result = await pool.query(
       `SELECT
          c.name,
-         ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days,
-         ARRAY_REMOVE(ARRAY_AGG(DISTINCT cpg.group_name), NULL) AS groups
+         c.delivery_days,
+         ARRAY_REMOVE(ARRAY_AGG(cpg.group_name),NULL) AS groups
        FROM clients c
-       LEFT JOIN client_delivery_days dd ON c.id = dd.client_id
        LEFT JOIN client_product_groups cpg
          ON c.id = cpg.client_id
        WHERE c.login = $1
@@ -54,12 +53,9 @@ app.get("/clients", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
-        c.id, c.login, c.name,
-        ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days, 
+        c.id, c.login, c.name, c.delivery_days, 
         ARRAY_REMOVE(ARRAY_AGG(cpg.group_name), NULL) AS groups
       FROM clients c
-      LEFT JOIN client_delivery_days dd ON c.id = dd.client_id
-       LEFT JOIN client_delivery_days dd ON c.id = dd.client_id
       LEFT JOIN client_product_groups cpg ON c.id = cpg.client_id
       GROUP BY c.id
       ORDER BY c.id
@@ -75,21 +71,14 @@ app.post("/clients", async (req, res) => {
   const { login, name, delivery_days, password, groups } = req.body;
   try {
     const clientRes = await pool.query(
-      "INSERT INTO clients (login, name, password) VALUES ($1, $2, $3) RETURNING id",
-      [login.toUpperCase(), name, password]
+      "INSERT INTO clients (login, name, delivery_days, password) VALUES ($1, $2, $3, $4) RETURNING id",
+      [login.toUpperCase(), name, delivery_days.split(",").map(d => d.trim()), password]
     );
     const clientId = clientRes.rows[0].id;
 
     if (groups && groups.length > 0) {
       for (const group of groups) {
         await pool.query("INSERT INTO client_product_groups (client_id, group_name) VALUES ($1, $2)", [clientId, group]);
-      }
-    }
-
-    
-    if (delivery_days && delivery_days.length > 0) {
-      for (const day of delivery_days) {
-        await pool.query("INSERT INTO client_delivery_days (client_id, day) VALUES ($1, $2)", [clientId, day]);
       }
     }
 
@@ -106,14 +95,21 @@ app.put("/clients/:id", async (req, res) => {
 
   const clientId = parseInt(id, 10);
   const clientLogin = login.toUpperCase();
-  const daysArray = delivery_days;
+  const daysArray = delivery_days.split(",").map((d) => d.trim());
 
   const clientUpdWithPwd = `
-    UPDATE clients SET login = $1, name = $2, password = $3
+    UPDATE clients
+       SET login = $1,
+           name = $2,
+           delivery_days = $3,
+           password = $4
      WHERE id = $5
   `;
   const clientUpdNoPwd = `
-    UPDATE clients SET login = $1, name = $2
+    UPDATE clients
+       SET login = $1,
+           name = $2,
+           delivery_days = $3
      WHERE id = $4
   `;
 
@@ -136,16 +132,7 @@ app.put("/clients/:id", async (req, res) => {
       await tx.query(clientUpdNoPwd, [clientLogin, name, daysArray, clientId]);
     }
 
-    
     await tx.query(deleteOldGroups, [clientId]);
-
-    await tx.query("DELETE FROM client_delivery_days WHERE client_id = $1", [clientId]);
-    if (Array.isArray(daysArray)) {
-      for (const day of daysArray) {
-        await tx.query("INSERT INTO client_delivery_days (client_id, day) VALUES ($1, $2)", [clientId, day]);
-      }
-    }
-
 
     if (Array.isArray(groups)) {
       for (const grp of groups) {
@@ -199,38 +186,18 @@ app.get("/product-groups", async (req, res) => {
 app.get("/products-full", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.name, p.category, p.active, p.group_id, pg.name AS group_name
-      FROM products p
-      LEFT JOIN product_groups pg ON p.group_id = pg.id
-      ORDER BY p.group_id, p.id
-    `);
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Error loading full products:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.post("/products", async (req, res) => {
-  const { login } = req.body;
-
-  try {
-    const result = await pool.query(
-      `SELECT
+      SELECT
          p.id,
          p.name,
          p.category,
          p.group_id,
          pg.name AS group_name
        FROM products p
-       JOIN product_groups pg
-         ON p.group_id = pg.id
-       JOIN client_product_groups cpg
-         ON pg.name = cpg.group_name
-       JOIN clients c
-         ON cpg.client_id = c.id
-       WHERE c.login = $1
-         AND p.active = TRUE
+       JOIN product_groups pg ON p.group_id = pg.id
+       JOIN product_delivery_days pdd ON p.id = pdd.product_id
+       JOIN client_product_groups cpg ON pg.name = cpg.group_name
+       JOIN clients c ON cpg.client_id = c.id
+       WHERE c.login = $1 AND pdd.day = $2 AND p.active = TRUE
        ORDER BY p.group_id, p.id`,
       [login.toUpperCase()]
     );
@@ -284,13 +251,6 @@ app.post("/messages", async (req, res) => {
       "INSERT INTO messages (content, recipients) VALUES ($1, $2)",
       [content, recipients]
     );
-    
-    if (delivery_days && delivery_days.length > 0) {
-      for (const day of delivery_days) {
-        await pool.query("INSERT INTO client_delivery_days (client_id, day) VALUES ($1, $2)", [clientId, day]);
-      }
-    }
-
     res.sendStatus(201);
   } catch (error) {
     console.error("Message insert error:", error.message);
