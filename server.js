@@ -320,11 +320,11 @@ app.get('/routes', async (req, res) => {
 app.get('/delivery-days', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT delivery_day FROM delivery_dates
-      WHERE delivery_day IS NOT NULL AND delivery_day <> ''
-      ORDER BY delivery_day
+      SELECT DISTINCT delivery_days FROM delivery_dates
+      WHERE delivery_days IS NOT NULL AND delivery_days <> ''
+      ORDER BY delivery_days
     `);
-    const days = result.rows.map(row => row.delivery_day);
+    const days = result.rows.map(row => row.delivery_days);
     res.json(days);
   } catch (error) {
     console.error("Delivery day fetch error:", error.message);
