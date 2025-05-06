@@ -72,23 +72,33 @@ app.get("/clients", async (req, res) => {
 });
 
 app.post("/clients", async (req, res) => {
-  const { login, name, delivery_days, password, groups } = req.body;
+  const { login, name, delivery_days, password, groups, route } = req.body;
+  const clientId = null;
+
+  const filteredDeliveryDays = Array.isArray(delivery_days)
+    ? delivery_days.filter(day => day && day.trim() !== '')
+    : [];
+
   try {
     const clientRes = await pool.query(
-      "INSERT INTO clients (login, name, password) VALUES ($1, $2, $3) RETURNING id",
-      [login.toUpperCase(), name, password]
+      "INSERT INTO clients (login, name, password, route) VALUES ($1, $2, $3, $4) RETURNING id",
+      [login.toUpperCase(), name, password, route]
     );
     const clientId = clientRes.rows[0].id;
 
-    if (Array.isArray(delivery_days)) {
-      for (const day of delivery_days) {
-        await pool.query("INSERT INTO client_delivery_days (client_id, day) VALUES ($1, $2)", [clientId, day]);
-      }
+    for (const day of filteredDeliveryDays) {
+      await pool.query(
+        "INSERT INTO client_delivery_days (client_id, day) VALUES ($1, $2)",
+        [clientId, day]
+      );
     }
 
     if (Array.isArray(groups)) {
       for (const group of groups) {
-        await pool.query("INSERT INTO client_product_groups (client_id, group_name) VALUES ($1, $2)", [clientId, group]);
+        await pool.query(
+          "INSERT INTO client_product_groups (client_id, group_name) VALUES ($1, $2)",
+          [clientId, group]
+        );
       }
     }
 
@@ -101,21 +111,26 @@ app.post("/clients", async (req, res) => {
 
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
-  const { login, name, delivery_days, password, groups } = req.body;
+  const { login, name, delivery_days, password, groups, route } = req.body;
   const clientId = parseInt(id, 10);
   const tx = await pool.connect();
+
+  const filteredDeliveryDays = Array.isArray(delivery_days)
+    ? delivery_days.filter(day => day && day.trim() !== '')
+    : [];
+
   try {
     await tx.query("BEGIN");
 
     if (password && password.trim() !== "") {
       await tx.query(
-        "UPDATE clients SET login = $1, name = $2, password = $3 WHERE id = $4",
-        [login.toUpperCase(), name, password, clientId]
+        "UPDATE clients SET login = $1, name = $2, route = $3, password = $4 WHERE id = $5",
+        [login.toUpperCase(), name, route, password, clientId]
       );
     } else {
       await tx.query(
-        "UPDATE clients SET login = $1, name = $2 WHERE id = $3",
-        [login.toUpperCase(), name, clientId]
+        "UPDATE clients SET login = $1, name = $2, route = $3 WHERE id = $4",
+        [login.toUpperCase(), name, route, clientId]
       );
     }
 
@@ -124,14 +139,18 @@ app.put("/clients/:id", async (req, res) => {
 
     if (Array.isArray(groups)) {
       for (const group of groups) {
-        await tx.query("INSERT INTO client_product_groups (client_id, group_name) VALUES ($1, $2)", [clientId, group]);
+        await tx.query(
+          "INSERT INTO client_product_groups (client_id, group_name) VALUES ($1, $2)",
+          [clientId, group]
+        );
       }
     }
 
-    if (Array.isArray(delivery_days)) {
-      for (const day of delivery_days) {
-        await tx.query("INSERT INTO client_delivery_days (client_id, day) VALUES ($1, $2)", [clientId, day]);
-      }
+    for (const day of filteredDeliveryDays) {
+      await tx.query(
+        "INSERT INTO client_delivery_days (client_id, day) VALUES ($1, $2)",
+        [clientId, day]
+      );
     }
 
     await tx.query("COMMIT");
@@ -144,6 +163,8 @@ app.put("/clients/:id", async (req, res) => {
     tx.release();
   }
 });
+
+
 
 app.delete("/clients/:id", async (req, res) => {
   try {
