@@ -50,14 +50,14 @@ app.get("/clients", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
-		c.id, c.login, c.name, c.route,
-		ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days,
-		ARRAY_REMOVE(ARRAY_AGG(DISTINCT cpg.group_name), NULL) AS groups
-	FROM clients c
-	LEFT JOIN client_delivery_days dd ON c.id = dd.client_id
-	LEFT JOIN client_product_groups cpg ON c.id = cpg.client_id
-	GROUP BY c.id
-	ORDER BY c.id
+        c.id, c.login, c.name,
+        ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days,
+        ARRAY_REMOVE(ARRAY_AGG(DISTINCT cpg.group_name), NULL) AS groups
+      FROM clients c
+      LEFT JOIN client_delivery_days dd ON c.id = dd.client_id
+      LEFT JOIN client_product_groups cpg ON c.id = cpg.client_id
+      GROUP BY c.id
+      ORDER BY c.id
     `);
     res.json(result.rows);
   } catch (error) {
