@@ -5,8 +5,11 @@ const { Pool } = require("pg");
 
 const app = express();
 app.use(cors({
-  origin: 'https://breadski-admin.onrender.com'
+  origin: 'https://breadski-admin.onrender.com',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: false
 }));
+
 app.use(express.json());
 
 const pool = new Pool({
