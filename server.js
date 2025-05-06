@@ -32,6 +32,7 @@ app.post("/login", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
+	    c.login,
         c.name,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT cpg.group_name), NULL) AS groups
