@@ -282,6 +282,34 @@ app.get("/product-groups", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+app.get('/routes', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT route FROM clients
+      WHERE route IS NOT NULL AND route <> ''
+      ORDER BY route
+    `);
+    const routes = result.rows.map(row => row.route);
+    res.json(routes);
+  } catch (error) {
+    console.error("Route fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+app.get('/delivery-days', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT delivery_day FROM delivery_dates
+      WHERE delivery_day IS NOT NULL AND delivery_day <> ''
+      ORDER BY delivery_day
+    `);
+    const days = result.rows.map(row => row.delivery_day);
+    res.json(days);
+  } catch (error) {
+    console.error("Delivery day fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
