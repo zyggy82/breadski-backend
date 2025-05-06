@@ -4,16 +4,7 @@ const nodemailer = require("nodemailer");
 const { Pool } = require("pg");
 
 const app = express();
-app.use(cors({
-  origin: [
-    'https://breadski-admin.onrender.com',
-    'https://breadski-mobile.onrender.com', // jeśli masz wersję mobilną na Render
-    'https://*.expo.dev', // dla Expo
-    'http://localhost:19006' // dla developmentu lokalnego
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: false
-}));
+app.use(cors({}));
 
 
 app.use(express.json());
