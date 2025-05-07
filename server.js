@@ -1,29 +1,35 @@
+// === Importy bibliotek ===
 const express = require("express");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
 const { Pool } = require("pg");
 
+// === Inicjalizacja aplikacji Express ===
 const app = express();
-app.use(cors({}));
+app.use(cors()); // Zezwolenie na CORS dla wszystkich połączeń
+app.use(express.json()); // Parsowanie JSON w ciele żądań
 
-
-app.use(express.json());
-
+// === Konfiguracja połączenia z bazą danych PostgreSQL ===
 const pool = new Pool({
   connectionString: "postgresql://breadski_db_user:tt1Cx4TGFVW3fNR3p62a6S26hblArm2Q@dpg-d0491615pdvs73c5hlvg-a.frankfurt-postgres.render.com/breadski_db",
   ssl: { rejectUnauthorized: false }
 });
 
-let orderCounter = 1;
+let orderCounter = 1; // Licznik zamówień
 
+// === Endpointy ===
+
+// Sprawdzenie, czy API działa
 app.get("/", (req, res) => {
   res.send("Breadski API is live");
 });
 
+// Zwrócenie kolejnego numeru zamówienia
 app.get("/next-order-number", (req, res) => {
   res.json({ orderNumber: orderCounter++ });
 });
 
+// Logowanie użytkownika
 app.post("/login", async (req, res) => {
   const { login, password } = req.body;
   try {
@@ -51,18 +57,19 @@ app.post("/login", async (req, res) => {
   }
 });
 
+// Pobranie listy klientów
 app.get("/clients", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
-		c.id, c.login, c.name, c.route,
-		ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days,
-		ARRAY_REMOVE(ARRAY_AGG(DISTINCT cpg.group_name), NULL) AS groups
-	FROM clients c
-	LEFT JOIN client_delivery_days dd ON c.id = dd.client_id
-	LEFT JOIN client_product_groups cpg ON c.id = cpg.client_id
-	GROUP BY c.id
-	ORDER BY c.id
+        c.id, c.login, c.name, c.route,
+        ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days,
+        ARRAY_REMOVE(ARRAY_AGG(DISTINCT cpg.group_name), NULL) AS groups
+      FROM clients c
+      LEFT JOIN client_delivery_days dd ON c.id = dd.client_id
+      LEFT JOIN client_product_groups cpg ON c.id = cpg.client_id
+      GROUP BY c.id
+      ORDER BY c.id
     `);
     res.json(result.rows);
   } catch (error) {
@@ -71,21 +78,24 @@ app.get("/clients", async (req, res) => {
   }
 });
 
+// Dodanie nowego klienta
 app.post("/clients", async (req, res) => {
   const { login, name, delivery_days, password, groups, route } = req.body;
-  const clientId = null;
 
+  // Filtrowanie pustych wartości
   const filteredDeliveryDays = Array.isArray(delivery_days)
     ? delivery_days.filter(day => day && day.trim() !== '')
     : [];
 
   try {
+    // Wstawienie klienta
     const clientRes = await pool.query(
       "INSERT INTO clients (login, name, password, route) VALUES ($1, $2, $3, $4) RETURNING id",
       [login.toUpperCase(), name, password, route]
     );
     const clientId = clientRes.rows[0].id;
 
+    // Dodanie dni dostaw
     for (const day of filteredDeliveryDays) {
       await pool.query(
         "INSERT INTO client_delivery_days (client_id, day) VALUES ($1, $2)",
@@ -93,6 +103,7 @@ app.post("/clients", async (req, res) => {
       );
     }
 
+    // Dodanie grup produktów
     if (Array.isArray(groups)) {
       for (const group of groups) {
         await pool.query(
@@ -109,6 +120,7 @@ app.post("/clients", async (req, res) => {
   }
 });
 
+// Edycja danych klienta
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
   const { login, name, delivery_days, password, groups, route } = req.body;
@@ -163,9 +175,7 @@ app.put("/clients/:id", async (req, res) => {
     tx.release();
   }
 });
-
-
-
+// === Usuwanie klienta ===
 app.delete("/clients/:id", async (req, res) => {
   try {
     await pool.query("DELETE FROM clients WHERE id = $1", [req.params.id]);
@@ -175,21 +185,22 @@ app.delete("/clients/:id", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+// === Pobieranie produktów dla danego klienta na określony dzień ===
 app.post("/products", async (req, res) => {
   const { login, day } = req.body;
   try {
-    const result = await pool.query(
-      `SELECT
-         p.id, p.name, p.category, p.group_id, pg.name AS group_name
-       FROM products p
-       JOIN product_groups pg ON p.group_id = pg.id
-       JOIN product_delivery_days pdd ON p.id = pdd.product_id
-       JOIN client_product_groups cpg ON pg.name = cpg.group_name
-       JOIN clients c ON cpg.client_id = c.id
-       WHERE c.login = $1 AND pdd.day = $2 AND p.active = TRUE
-       ORDER BY p.group_id, p.id`,
-      [login.toUpperCase(), day]
-    );
+    const result = await pool.query(`
+      SELECT
+        p.id, p.name, p.category, p.group_id, pg.name AS group_name
+      FROM products p
+      JOIN product_groups pg ON p.group_id = pg.id
+      JOIN product_delivery_days pdd ON p.id = pdd.product_id
+      JOIN client_product_groups cpg ON pg.name = cpg.group_name
+      JOIN clients c ON cpg.client_id = c.id
+      WHERE c.login = $1 AND pdd.day = $2 AND p.active = TRUE
+      ORDER BY p.group_id, p.id
+    `, [login.toUpperCase(), day]);
     res.json(result.rows);
   } catch (error) {
     console.error("Product fetch error:", error.message);
@@ -197,21 +208,27 @@ app.post("/products", async (req, res) => {
   }
 });
 
+// === Wysyłanie zamówienia i powiadomienia e-mail ===
 app.post("/send", async (req, res) => {
   const { login, deliveryDate, orderType, note, items } = req.body;
   try {
+    // Pobranie danych klienta
     const clientRes = await pool.query("SELECT id, name FROM clients WHERE login = $1", [login.toUpperCase()]);
     if (clientRes.rows.length === 0) return res.status(404).json({ error: "Client not found" });
 
     const { id: clientId, name: clientName } = clientRes.rows[0];
+
+    // Pobranie kolejnego numeru zamówienia
     const numRes = await pool.query("SELECT COALESCE(MAX(order_number), 0) + 1 AS next_number FROM orders");
     const orderNumber = numRes.rows[0].next_number;
 
+    // Dodanie zamówienia do bazy danych
     await pool.query(
       "INSERT INTO orders (client_id, order_number, delivery_date, order_type, note, items) VALUES ($1, $2, $3, $4, $5, $6::jsonb)",
       [clientId, orderNumber, deliveryDate, orderType, note, JSON.stringify(items)]
     );
 
+    // Konfiguracja transportera SMTP
     const transporter = nodemailer.createTransport({
       host: "lh164.dnsireland.com",
       port: 465,
@@ -222,6 +239,7 @@ app.post("/send", async (req, res) => {
       }
     });
 
+    // Treść e-maila
     const subject = `Zamówienie ${clientName} ${new Date().toLocaleDateString("pl-PL")} #${orderNumber}`;
     const text = [
       `Klient: ${clientName}`,
@@ -233,6 +251,7 @@ app.post("/send", async (req, res) => {
       ...items.map(i => `- ${i.name}: ${i.qty}`)
     ].join("\n");
 
+    // Wysłanie e-maila
     await transporter.sendMail({
       from: '"Breadski Orders" <apk@thebreadskibrothers.ie>',
       to: "orders@thebreadskibrothers.ie",
@@ -247,6 +266,7 @@ app.post("/send", async (req, res) => {
   }
 });
 
+// === Pobieranie listy wiadomości ===
 app.get("/messages", async (req, res) => {
   try {
     const result = await pool.query("SELECT id, content, created_at, recipients FROM messages ORDER BY created_at DESC");
@@ -257,6 +277,7 @@ app.get("/messages", async (req, res) => {
   }
 });
 
+// === Dodawanie nowej wiadomości ===
 app.post("/messages", async (req, res) => {
   const { content, recipients } = req.body;
   try {
@@ -268,15 +289,15 @@ app.post("/messages", async (req, res) => {
   }
 });
 
+// === Pobieranie najnowszej wiadomości dla użytkownika ===
 app.get("/messages/latest/:login", async (req, res) => {
   const { login } = req.params;
   try {
-    const result = await pool.query(
-      `SELECT content, created_at FROM messages
-       WHERE recipients IS NULL OR recipients @> ARRAY[$1]
-       ORDER BY created_at DESC LIMIT 1`,
-      [login.toUpperCase()]
-    );
+    const result = await pool.query(`
+      SELECT content, created_at FROM messages
+      WHERE recipients IS NULL OR recipients @> ARRAY[$1]
+      ORDER BY created_at DESC LIMIT 1
+    `, [login.toUpperCase()]);
     res.json(result.rows[0] || null);
   } catch (error) {
     console.error("Latest message fetch error:", error.message);
@@ -284,6 +305,7 @@ app.get("/messages/latest/:login", async (req, res) => {
   }
 });
 
+// === Pobieranie listy grup produktów ===
 app.get("/groups", async (req, res) => {
   try {
     const result = await pool.query("SELECT id, name FROM product_groups ORDER BY id");
@@ -294,15 +316,7 @@ app.get("/groups", async (req, res) => {
   }
 });
 
-app.get("/product-groups", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT id, name FROM product_groups ORDER BY id");
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Alias group fetch error:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+// === Pobieranie listy unikalnych tras klientów ===
 app.get('/routes', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -317,6 +331,8 @@ app.get('/routes', async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+// === Pobieranie listy unikalnych dni dostaw ===
 app.get('/delivery-days', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -332,6 +348,7 @@ app.get('/delivery-days', async (req, res) => {
   }
 });
 
+// === Uruchomienie serwera na porcie 3000 ===
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
 });
