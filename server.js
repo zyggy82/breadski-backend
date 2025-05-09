@@ -67,7 +67,12 @@ app.get("/clients", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
-        c.id, c.login, c.name, c.route, c.route_add,
+        c.id, 
+        c.login, 
+        c.name, 
+        c.route, 
+        c.route_add, 
+        c.password,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT cpg.group_name), NULL) AS groups
       FROM clients c
@@ -77,7 +82,6 @@ app.get("/clients", async (req, res) => {
       ORDER BY c.id
     `);
 
-    // Parsowanie route_add do tablicy (jeśli nie jest NULL)
     const clients = result.rows.map(row => ({
       ...row,
       route_add: row.route_add ? row.route_add.split(",") : []
@@ -89,6 +93,7 @@ app.get("/clients", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 
 // Dodanie nowego klienta
