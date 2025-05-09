@@ -141,7 +141,7 @@ app.post("/clients", async (req, res) => {
 // Edycja danych klienta
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
-  const { login, name, delivery_days, password, groups, route, route_add } = req.body;
+  const { login, name, password, delivery_days, groups, route, route_add } = req.body;
   const clientId = parseInt(id, 10);
 
   const filteredDeliveryDays = Array.isArray(delivery_days)
@@ -153,20 +153,18 @@ app.put("/clients/:id", async (req, res) => {
   try {
     await tx.query("BEGIN");
 
-    // Aktualizacja głównych danych klienta
-    if (password && password.trim() !== "") {
-      await tx.query(
-        "UPDATE clients SET login = $1, name = $2, route = $3, password = $4, route_add = $5 WHERE id = $6",
-        [login.toUpperCase(), name, route, password, route_add.join(','), clientId]
-      );
-    } else {
-      await tx.query(
-        "UPDATE clients SET login = $1, name = $2, route = $3, route_add = $4 WHERE id = $5",
-        [login.toUpperCase(), name, route, route_add.join(','), clientId]
-      );
-    }
+    await tx.query(
+      `UPDATE clients 
+       SET login = $1, 
+           name = $2, 
+           route = $3, 
+           route_add = $4, 
+           password = $5 
+       WHERE id = $6`,
+      [login.toUpperCase(), name, route, route_add.join(','), password, clientId]
+    );
 
-    // Usunięcie starych powiązań z produktami i dniami dostaw
+    // Usunięcie starych powiązań
     await tx.query("DELETE FROM client_product_groups WHERE client_id = $1", [clientId]);
     await tx.query("DELETE FROM client_delivery_days WHERE client_id = $1", [clientId]);
 
@@ -197,6 +195,7 @@ app.put("/clients/:id", async (req, res) => {
     tx.release();
   }
 });
+
 
 // === Usuwanie klienta ===
 app.delete("/clients/:id", async (req, res) => {
