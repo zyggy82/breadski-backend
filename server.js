@@ -338,7 +338,7 @@ app.get('/delivery-days', async (req, res) => {
     const result = await pool.query(`
       SELECT DISTINCT delivery_days FROM delivery_dates
       WHERE delivery_days IS NOT NULL AND delivery_days <> ''
-      ORDER BY id
+      ORDER BY delivery_days
     `);
     const days = result.rows.map(row => row.delivery_days);
     res.json(days);
