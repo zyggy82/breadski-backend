@@ -37,6 +37,8 @@ app.post("/login", async (req, res) => {
       SELECT
         c.login,
         c.name,
+        c.route,
+        c.route_add,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT cpg.group_name), NULL) AS groups
       FROM clients c
@@ -50,19 +52,22 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid login or password" });
     }
 
-    res.json(result.rows[0]);
+    const client = result.rows[0];
+    client.route_add = client.route_add ? client.route_add.split(",") : [];
+    res.json(client);
   } catch (error) {
     console.error("Login error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
 
+
 // Pobranie listy klientów
 app.get("/clients", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
-        c.id, c.login, c.name, c.route,
+        c.id, c.login, c.name, c.route, c.route_add,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT dd.day), NULL) AS delivery_days,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT cpg.group_name), NULL) AS groups
       FROM clients c
@@ -71,12 +76,20 @@ app.get("/clients", async (req, res) => {
       GROUP BY c.id
       ORDER BY c.id
     `);
-    res.json(result.rows);
+
+    // Parsowanie route_add do tablicy (jeśli nie jest NULL)
+    const clients = result.rows.map(row => ({
+      ...row,
+      route_add: row.route_add ? row.route_add.split(",") : []
+    }));
+
+    res.json(clients);
   } catch (error) {
     console.error("Client fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // Dodanie nowego klienta
 app.post("/clients", async (req, res) => {
@@ -123,32 +136,36 @@ app.post("/clients", async (req, res) => {
 // Edycja danych klienta
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
-  const { login, name, delivery_days, password, groups, route } = req.body;
+  const { login, name, delivery_days, password, groups, route, route_add } = req.body;
   const clientId = parseInt(id, 10);
-  const tx = await pool.connect();
 
   const filteredDeliveryDays = Array.isArray(delivery_days)
     ? delivery_days.filter(day => day && day.trim() !== '')
     : [];
 
+  const tx = await pool.connect();
+
   try {
     await tx.query("BEGIN");
 
+    // Aktualizacja głównych danych klienta
     if (password && password.trim() !== "") {
       await tx.query(
-        "UPDATE clients SET login = $1, name = $2, route = $3, password = $4 WHERE id = $5",
-        [login.toUpperCase(), name, route, password, clientId]
+        "UPDATE clients SET login = $1, name = $2, route = $3, password = $4, route_add = $5 WHERE id = $6",
+        [login.toUpperCase(), name, route, password, route_add.join(','), clientId]
       );
     } else {
       await tx.query(
-        "UPDATE clients SET login = $1, name = $2, route = $3 WHERE id = $4",
-        [login.toUpperCase(), name, route, clientId]
+        "UPDATE clients SET login = $1, name = $2, route = $3, route_add = $4 WHERE id = $5",
+        [login.toUpperCase(), name, route, route_add.join(','), clientId]
       );
     }
 
+    // Usunięcie starych powiązań z produktami i dniami dostaw
     await tx.query("DELETE FROM client_product_groups WHERE client_id = $1", [clientId]);
     await tx.query("DELETE FROM client_delivery_days WHERE client_id = $1", [clientId]);
 
+    // Dodanie nowych powiązań
     if (Array.isArray(groups)) {
       for (const group of groups) {
         await tx.query(
@@ -169,12 +186,13 @@ app.put("/clients/:id", async (req, res) => {
     res.sendStatus(200);
   } catch (err) {
     await tx.query("ROLLBACK");
-    console.error("Client update error:", err);
+    console.error("Client update error:", err.message);
     res.status(500).json({ error: "Server error" });
   } finally {
     tx.release();
   }
 });
+
 // === Usuwanie klienta ===
 app.delete("/clients/:id", async (req, res) => {
   try {
@@ -336,11 +354,14 @@ app.get('/routes', async (req, res) => {
 app.get('/delivery-days', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, delivery_days 
-	  FROM delivery_dates
-      WHERE delivery_days IS NOT NULL AND delivery_days <> ''
+      SELECT DISTINCT delivery_days 
+      FROM delivery_dates 
+      WHERE 
+        route = $1 OR 
+        route = ANY(string_to_array($2, ','))
       ORDER BY id
-    `);
+    `, [route, route_add]);
+
     const days = result.rows.map(row => row.delivery_days);
     res.json(days);
   } catch (error) {
@@ -348,6 +369,7 @@ app.get('/delivery-days', async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // === Uruchomienie serwera na porcie 3000 ===
 app.listen(3000, () => {
