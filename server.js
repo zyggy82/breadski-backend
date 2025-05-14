@@ -355,28 +355,22 @@ app.get('/routes', async (req, res) => {
 });
 
 // === Pobieranie listy unikalnych dni dostaw ===
-app.post('/delivery-days', async (req, res) => {
-  const { route, route_add } = req.body;
-
+app.get('/delivery-days', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT delivery_days 
+      SELECT DISTINCT day 
       FROM delivery_dates 
-      WHERE 
-        route = $1 OR 
-        route = ANY(string_to_array($2, ','))
+      WHERE day IS NOT NULL AND day <> ''
       ORDER BY id
-    `, [route, route_add.join(',')]);
+    `);
 
-    const days = result.rows.map(row => row.delivery_days);
+    const days = result.rows.map(row => row.day);
     res.json(days);
   } catch (error) {
     console.error("Delivery day fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
-
-
 
 // === Uruchomienie serwera na porcie 3000 ===
 app.listen(3000, () => {
