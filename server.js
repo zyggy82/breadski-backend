@@ -404,7 +404,7 @@ app.get('/product-groups', async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-// === Pobieranie listy unikalnych tras ===
+// === Pobieranie listy unikalnych tras klientów ===
 app.get('/routes', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -414,11 +414,13 @@ app.get('/routes', async (req, res) => {
       ORDER BY route
     `);
 
+    // Sprawdzamy, co dokładnie zwraca SQL
+    console.log("✅ Pobrane trasy:", result.rows);
+
     const routes = result.rows.map(row => row.route);
-    console.log("✅ Pobrane trasy:", routes);
     res.json(routes);
   } catch (error) {
-    console.error("❌ Routes fetch error:", error.message);
+    console.error("❌ Route fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
