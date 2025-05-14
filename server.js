@@ -358,19 +358,21 @@ app.get('/routes', async (req, res) => {
 app.get('/delivery-days', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT day 
+      SELECT DISTINCT delivery_days 
       FROM delivery_dates 
-      WHERE day IS NOT NULL AND day <> ''
+      WHERE delivery_days IS NOT NULL AND delivery_days <> ''
       ORDER BY id
     `);
 
-    const days = result.rows.map(row => row.day);
+    const days = result.rows.map(row => row.delivery_days);
+    console.log("Pobrane dni dostaw:", days); // 👈 Sprawdzimy w logach, czy coś się pobiera
     res.json(days);
   } catch (error) {
     console.error("Delivery day fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // === Uruchomienie serwera na porcie 3000 ===
 app.listen(3000, () => {
