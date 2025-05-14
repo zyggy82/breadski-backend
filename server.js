@@ -354,7 +354,7 @@ app.get('/routes', async (req, res) => {
   }
 });
 
-// === Pobieranie listy unikalnych dni dostaw ===
+// === Pobieranie listy unikalnych dni dostaw – posortowane alfabetycznie ===
 app.get('/delivery-days', async (req, res) => {
   try {
     console.log("➡️ Pobieranie listy unikalnych dni dostaw...");
@@ -365,7 +365,17 @@ app.get('/delivery-days', async (req, res) => {
         SELECT DISTINCT delivery_days 
         FROM delivery_dates
       ) sub
-      ORDER BY delivery_days;
+      ORDER BY 
+        CASE
+          WHEN delivery_days = 'Monday' THEN 1
+          WHEN delivery_days = 'Tuesday' THEN 2
+          WHEN delivery_days = 'Wednesday' THEN 3
+          WHEN delivery_days = 'Thursday' THEN 4
+          WHEN delivery_days = 'Friday' THEN 5
+          WHEN delivery_days = 'Saturday' THEN 6
+          WHEN delivery_days = 'Sunday' THEN 7
+          ELSE 8
+        END
     `);
 
     const days = result.rows.map(row => row.delivery_days);
@@ -376,8 +386,6 @@ app.get('/delivery-days', async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
-
 
 
 // === Uruchomienie serwera na porcie 3000 ===
