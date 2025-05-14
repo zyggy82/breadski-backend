@@ -360,10 +360,12 @@ app.get('/delivery-days', async (req, res) => {
     console.log("➡️ Pobieranie listy unikalnych dni dostaw...");
 
     const result = await pool.query(`
-      SELECT DISTINCT delivery_days 
-      FROM delivery_dates 
-      WHERE delivery_days IS NOT NULL AND delivery_days <> ''
-      ORDER BY id
+      SELECT delivery_days 
+      FROM (
+        SELECT DISTINCT delivery_days 
+        FROM delivery_dates
+      ) sub
+      ORDER BY delivery_days;
     `);
 
     const days = result.rows.map(row => row.delivery_days);
@@ -374,6 +376,7 @@ app.get('/delivery-days', async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 
 
