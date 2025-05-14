@@ -386,6 +386,42 @@ app.get('/delivery-days', async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+// === Pobieranie listy unikalnych grup produktowych ===
+app.get('/product-groups', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT name 
+      FROM product_groups 
+      WHERE name IS NOT NULL AND name <> ''
+      ORDER BY name
+    `);
+
+    const groups = result.rows.map(row => row.name);
+    console.log("✅ Pobrane grupy produktowe:", groups);
+    res.json(groups);
+  } catch (error) {
+    console.error("❌ Product groups fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+// === Pobieranie listy unikalnych tras ===
+app.get('/routes', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT route 
+      FROM clients 
+      WHERE route IS NOT NULL AND route <> ''
+      ORDER BY route
+    `);
+
+    const routes = result.rows.map(row => row.route);
+    console.log("✅ Pobrane trasy:", routes);
+    res.json(routes);
+  } catch (error) {
+    console.error("❌ Routes fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 
 // === Uruchomienie serwera na porcie 3000 ===
