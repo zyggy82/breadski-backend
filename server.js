@@ -230,6 +230,31 @@ app.post("/products-client", async (req, res) => {
   }
 });
 
+// === ALIAS: Pobieranie produktów dla aplikacji mobilnej ===
+// Ten endpoint przywraca zgodność z aplikacją, która używała POST /products
+// Działa identycznie jak /products-client, tylko ma dawną nazwę
+app.post("/products", async (req, res) => {
+  const { login, day } = req.body;
+  try {
+    const result = await pool.query(`
+      SELECT
+        p.id, p.name, p.category, p.group_id, pg.name AS group_name
+      FROM products p
+      JOIN product_groups pg ON p.group_id = pg.id
+      JOIN product_delivery_days pdd ON p.id = pdd.product_id
+      JOIN client_product_groups cpg ON pg.name = cpg.group_name
+      JOIN clients c ON cpg.client_id = c.id
+      WHERE c.login = $1 AND pdd.day = $2 AND p.active = TRUE
+      ORDER BY p.group_id, p.id
+    `, [login.toUpperCase(), day]);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("📱 Alias /products fetch error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // === Wysyłanie zamówienia i powiadomienia e-mail ===
 app.post("/send", async (req, res) => {
   const { login, deliveryDate, orderType, note, items } = req.body;
