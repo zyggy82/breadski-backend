@@ -208,7 +208,7 @@ app.delete("/clients/:id", async (req, res) => {
   }
 });
 
-// === Pobieranie produktów dla danego klienta na określony dzień ===
+// === Pobieranie produktów dla danego klienta na określony dzień (aplikacja mobilna) ===
 app.post("/products-client", async (req, res) => {
   const { login, day } = req.body;
   try {
@@ -229,6 +229,7 @@ app.post("/products-client", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // === Wysyłanie zamówienia i powiadomienia e-mail ===
 app.post("/send", async (req, res) => {
@@ -334,22 +335,6 @@ app.get("/groups", async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error("Group fetch error:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// === Pobieranie listy unikalnych tras klientów ===
-app.get('/routes', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT DISTINCT route FROM clients
-      WHERE route IS NOT NULL AND route <> ''
-      ORDER BY route
-    `);
-    const routes = result.rows.map(row => row.route);
-    res.json(routes);
-  } catch (error) {
-    console.error("Route fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -463,6 +448,70 @@ app.post("/products", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+// === Endpoint: Pobieranie dni dostaw przypisanych do produktu ===
+app.get("/products/:id/delivery-days", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      "SELECT day FROM product_delivery_days WHERE product_id = $1 ORDER BY day",
+      [id]
+    );
+    const days = result.rows.map((row) => row.day);
+    res.json(days);
+  } catch (error) {
+    console.error("Fetch product delivery days error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// === Endpoint: Ustawianie dni dostaw dla produktu ===
+app.put("/products/:id/delivery-days", async (req, res) => {
+  const { id } = req.params;
+  const { days } = req.body; // days: string[]
+
+  if (!Array.isArray(days)) {
+    return res.status(400).json({ error: "Invalid days list" });
+  }
+
+  const tx = await pool.connect();
+  try {
+    await tx.query("BEGIN");
+
+    await tx.query("DELETE FROM product_delivery_days WHERE product_id = $1", [id]);
+
+    for (const day of days) {
+      await tx.query("INSERT INTO product_delivery_days (product_id, day) VALUES ($1, $2)", [id, day]);
+    }
+
+    await tx.query("COMMIT");
+    res.sendStatus(200);
+  } catch (error) {
+    await tx.query("ROLLBACK");
+    console.error("Update product delivery days error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    tx.release();
+  }
+});
+// === Aktualizacja istniejącego produktu ===
+app.put("/products/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, category, group_id, active } = req.body;
+
+  try {
+    await pool.query(
+      "UPDATE products SET name = $1, category = $2, group_id = $3, active = $4 WHERE id = $5",
+      [name, category, group_id, active, id]
+    );
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Product update error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+
 
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
