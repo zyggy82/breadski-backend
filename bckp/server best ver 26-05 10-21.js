@@ -426,29 +426,6 @@ app.get('/routes', async (req, res) => {
 });
 
 
-
-// === Pobieranie pełnej listy produktów do panelu admina ===
-app.get("/products-full", async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        p.id, 
-        p.name, 
-        p.category, 
-        p.group_id, 
-        pg.name AS group_name, 
-        p.active
-      FROM products p
-      LEFT JOIN product_groups pg ON p.group_id = pg.id
-      ORDER BY p.id
-    `);
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Products full fetch error:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
 // === Uruchomienie serwera na porcie 3000 ===
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
