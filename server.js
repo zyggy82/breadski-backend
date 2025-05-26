@@ -446,6 +446,8 @@ app.get("/products-full", async (req, res) => {
   } catch (error) {
     console.error("Products full fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
+  }
+});
 
 // === Dodawanie nowego produktu (panel admina) ===
 app.post("/products", async (req, res) => {
@@ -462,26 +464,6 @@ app.post("/products", async (req, res) => {
   }
 });
 
-
-// === Dodawanie nowego produktu (panel admina) ===
-app.post("/products", async (req, res) => {
-  const { name, category, group_id, active } = req.body;
-  try {
-    await pool.query(
-      "INSERT INTO products (name, category, group_id, active) VALUES ($1, $2, $3, $4)",
-      [name, category, group_id, active]
-    );
-    res.sendStatus(201);
-  } catch (error) {
-    console.error("Product insert error:", error.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-  }
-});
-
-// === Uruchomienie serwera na porcie 3000 ===
 app.listen(3000, () => {
   console.log("✅ Server is running on port 3000");
 });
