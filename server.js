@@ -446,6 +446,8 @@ app.get("/products-full", async (req, res) => {
   } catch (error) {
     console.error("Products full fetch error:", error.message);
     res.status(500).json({ error: "Server error" });
+  }
+}); 
 
 // === Dodawanie nowego produktu (panel admina) ===
 app.post("/products", async (req, res) => {
