@@ -448,6 +448,52 @@ app.post("/products", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+// === Endpoint: Pobieranie dni dostaw przypisanych do produktu ===
+app.get("/products/:id/delivery-days", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      "SELECT day FROM product_delivery_days WHERE product_id = $1 ORDER BY day",
+      [id]
+    );
+    const days = result.rows.map((row) => row.day);
+    res.json(days);
+  } catch (error) {
+    console.error("Fetch product delivery days error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// === Endpoint: Ustawianie dni dostaw dla produktu ===
+app.put("/products/:id/delivery-days", async (req, res) => {
+  const { id } = req.params;
+  const { days } = req.body; // days: string[]
+
+  if (!Array.isArray(days)) {
+    return res.status(400).json({ error: "Invalid days list" });
+  }
+
+  const tx = await pool.connect();
+  try {
+    await tx.query("BEGIN");
+
+    await tx.query("DELETE FROM product_delivery_days WHERE product_id = $1", [id]);
+
+    for (const day of days) {
+      await tx.query("INSERT INTO product_delivery_days (product_id, day) VALUES ($1, $2)", [id, day]);
+    }
+
+    await tx.query("COMMIT");
+    res.sendStatus(200);
+  } catch (error) {
+    await tx.query("ROLLBACK");
+    console.error("Update product delivery days error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    tx.release();
+  }
+});
+
 
 
 app.listen(3000, () => {
