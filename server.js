@@ -263,14 +263,14 @@ app.post("/send", async (req, res) => {
     });
 
     // Treść e-maila
-    const subject = `Zamówienie ${clientName} ${new Date().toLocaleDateString("pl-PL")} #${orderNumber}`;
+    const subject = `Order ${clientName} ${new Date().toLocaleDateString("pl-PL")} #${orderNumber}`;
     const text = [
-      `Klient: ${clientName}`,
-      `Typ: ${orderType === "full" ? "Pełne" : "Uzupełniające"}`,
-      `Data dostawy: ${new Date(deliveryDate).toLocaleDateString("pl-PL")}`,
-      `Notatka: ${note || "-"}`,
+      `Customer: ${clientName}`,
+      `Type: ${orderType === "full" ? "Full" : "Additional"}`,
+      `Delivery date: ${new Date(deliveryDate).toLocaleDateString("pl-PL")}`,
+      `Notate: ${note || "-"}`,
       "",
-      "Pozycje:",
+      "Products:",
       ...items.map(i => `- ${i.name}: ${i.qty}`)
     ].join("\n");
 
@@ -507,6 +507,30 @@ app.put("/products/:id", async (req, res) => {
   } catch (error) {
     console.error("Product update error:", error.message);
     res.status(500).json({ error: "Server error" });
+  }
+});
+// === Usuwanie produktu ===
+app.delete("/products/:id", async (req, res) => {
+  const { id } = req.params;
+  const tx = await pool.connect();
+
+  try {
+    await tx.query("BEGIN");
+
+    // Usuń powiązania z dniami dostaw
+    await tx.query("DELETE FROM product_delivery_days WHERE product_id = $1", [id]);
+
+    // Usuń produkt
+    await tx.query("DELETE FROM products WHERE id = $1", [id]);
+
+    await tx.query("COMMIT");
+    res.sendStatus(200);
+  } catch (error) {
+    await tx.query("ROLLBACK");
+    console.error("Product delete error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    tx.release();
   }
 });
 
