@@ -266,7 +266,7 @@ app.post("/send", async (req, res) => {
     const subject = `Order ${clientName} ${new Date().toLocaleDateString("pl-PL")} #${orderNumber}`;
     const text = [
       `Customer: ${clientName}`,
-      `Type: ${orderType === "full" ? "Full" : "Additional"}`,
+      `Type: ${orderType === "full" ? "Full" : "inne"}`,
       `Delivery date: ${new Date(deliveryDate).toLocaleDateString("pl-PL")}`,
       `Note: ${note || "-"}`,
       "",
