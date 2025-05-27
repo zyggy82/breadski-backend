@@ -268,7 +268,7 @@ app.post("/send", async (req, res) => {
       `Customer: ${clientName}`,
       `Type: ${orderType === "full" ? "Full" : "Additional"}`,
       `Delivery date: ${new Date(deliveryDate).toLocaleDateString("pl-PL")}`,
-      `Notate: ${note || "-"}`,
+      `Note: ${note || "-"}`,
       "",
       "Products:",
       ...items.map(i => `- ${i.name}: ${i.qty}`)
