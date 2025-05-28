@@ -230,6 +230,45 @@ app.post("/products-client", async (req, res) => {
   }
 });
 
+// === Endpoint: Zmiana hasła klienta ===
+app.put("/change-password", async (req, res) => {
+  const { login, oldPassword, newPassword } = req.body;
+
+  if (!login || !oldPassword || !newPassword) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+
+  try {
+    // Pobranie aktualnego hasła z bazy
+    const result = await pool.query(
+      "SELECT password FROM clients WHERE login = $1",
+      [login.toUpperCase()]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+
+    const currentPassword = result.rows[0].password;
+
+    // Proste porównanie (bez hashowania)
+    if (currentPassword !== oldPassword) {
+      return res.status(401).json({ error: "Old password is incorrect" });
+    }
+
+    // Aktualizacja hasła
+    await pool.query(
+      "UPDATE clients SET password = $1 WHERE login = $2",
+      [newPassword, login.toUpperCase()]
+    );
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Password change error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 // === Wysyłanie zamówienia i powiadomienia e-mail ===
 app.post("/send", async (req, res) => {
