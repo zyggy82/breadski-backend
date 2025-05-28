@@ -4,6 +4,7 @@ const cors = require("cors");
 const nodemailer = require("nodemailer");
 const { Pool } = require("pg");
 
+
 // === Inicjalizacja aplikacji Express ===
 const app = express();
 app.use(cors()); // Zezwolenie na CORS dla wszystkich połączeń
@@ -269,7 +270,6 @@ app.put("/change-password", async (req, res) => {
   }
 });
 
-
 // === Wysyłanie zamówienia i powiadomienia e-mail ===
 app.post("/send", async (req, res) => {
   const { login, deliveryDate, orderType, note, items } = req.body;
@@ -290,6 +290,10 @@ app.post("/send", async (req, res) => {
       [clientId, orderNumber, deliveryDate, orderType, note, JSON.stringify(items)]
     );
 
+    // 🛠️ Naprawa formatu daty
+    const [year, month, day] = deliveryDate.split("T")[0].split("-");
+    const formattedDate = `${day}.${month}.${year}`;
+
     // Konfiguracja transportera SMTP
     const transporter = nodemailer.createTransport({
       host: "lh164.dnsireland.com",
@@ -301,19 +305,17 @@ app.post("/send", async (req, res) => {
       }
     });
 
-    // Treść e-maila
     const subject = `Order ${clientName} ${new Date().toLocaleDateString("pl-PL")} #${orderNumber}`;
     const text = [
       `Customer: ${clientName}`,
       `Type: ${orderType === "full" ? "Full" : "Additional"}`,
-      `Delivery date: ${new Date(deliveryDate).toLocaleDateString("pl-PL")}`,
+      `Delivery date: ${formattedDate}`,
       `Note: ${note || "-"}`,
       "",
       "Products:",
       ...items.map(i => `- ${i.name}: ${i.qty}`)
     ].join("\n");
 
-    // Wysłanie e-maila
     await transporter.sendMail({
       from: '"Breadski Orders" <apk@thebreadskibrothers.ie>',
       to: "orders@thebreadskibrothers.ie",
@@ -327,6 +329,8 @@ app.post("/send", async (req, res) => {
     res.status(500).json({ error: "Failed to send order" });
   }
 });
+
+
 
 // === Pobieranie listy wiadomości ===
 app.get("/messages", async (req, res) => {
