@@ -1,7 +1,6 @@
 // === Importy bibliotek ===
 const express = require("express");
 const cors = require("cors");
-const nodemailer = require("nodemailer");
 const { Pool } = require("pg");
 
 
@@ -313,17 +312,6 @@ app.post("/send", async (req, res) => {
     const [year, month, day] = deliveryDate.split("T")[0].split("-");
     const formattedDate = `${day}.${month}.${year}`;
 
-    // Konfiguracja transportera SMTP
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: true,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
-
     const subject = `Order ${clientName} ${new Date().toLocaleDateString("pl-PL")} #${orderNumber}`;
     const text = [
       `Customer: ${clientName}`,
@@ -335,14 +323,55 @@ app.post("/send", async (req, res) => {
       ...items.map(i => `- ${i.name}: ${i.qty}`)
     ].join("\n");
 
-    await transporter.sendMail({
-      from: '"Breadski Orders" <apk@thebreadskibrothers.ie>',
-      to: "orders@thebreadskibrothers.ie",
-      subject,
-      text
+    // Send notification using Brevo HTTPS API
+    let emailSent = false;
+
+    try {
+      if (!process.env.BREVO_API_KEY) {
+        throw new Error("BREVO_API_KEY is missing");
+      }
+
+      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "api-key": process.env.BREVO_API_KEY
+        },
+        body: JSON.stringify({
+          sender: {
+            name: "Breadski Orders",
+            email: "apk@thebreadskibrothers.ie"
+          },
+          to: [
+            { email: "orders@thebreadskibrothers.ie" }
+          ],
+          subject,
+          textContent: text
+        }),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Brevo API HTTP ${response.status}`);
+      }
+
+      emailSent = true;
+      console.log(`Order ${orderNumber}: email accepted by Brevo`);
+
+    } catch (emailError) {
+      console.error(`Order ${orderNumber}: email notification failed:`, emailError.message);
+    }
+
+    return res.status(200).json({
+      saved: true,
+      orderNumber,
+      emailSent,
+      message: emailSent
+        ? "Order saved. Email notification accepted."
+        : "Order saved, but email notification failed."
     });
 
-    res.sendStatus(200);
   } catch (err) {
     console.error("Send error:", err.message);
     res.status(500).json({ error: "Failed to send order" });
