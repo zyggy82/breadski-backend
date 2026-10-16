@@ -273,6 +273,25 @@ app.put("/change-password", async (req, res) => {
 // === Wysyłanie zamówienia i powiadomienia e-mail ===
 app.post("/send", async (req, res) => {
   const { login, deliveryDate, orderType, note, items } = req.body;
+
+  // === Validate order quantities ===
+  if (
+    !Array.isArray(items) ||
+    items.length === 0 ||
+    items.some(item =>
+      !item ||
+      typeof item.name !== "string" ||
+      !item.name.trim() ||
+      !Number.isInteger(item.qty) ||
+      item.qty < 1 ||
+      item.qty > 999
+    )
+  ) {
+    return res.status(400).json({
+      error: "Invalid order quantity. Each product must have a quantity between 1 and 999."
+    });
+  }
+
   try {
     // Pobranie danych klienta
     const clientRes = await pool.query("SELECT id, name FROM clients WHERE login = $1", [login.toUpperCase()]);
