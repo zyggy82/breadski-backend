@@ -11,7 +11,7 @@ app.use(express.json()); // Parsowanie JSON w ciele żądań
 
 // === Konfiguracja połączenia z bazą danych PostgreSQL ===
 const pool = new Pool({
-  connectionString: "postgresql://breadski_db_user:tt1Cx4TGFVW3fNR3p62a6S26hblArm2Q@dpg-d0491615pdvs73c5hlvg-a.frankfurt-postgres.render.com/breadski_db",
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
